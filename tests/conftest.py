@@ -26,6 +26,66 @@ for handler in logging.root.handlers[:]:  # pragma: no cover
     handler.close()
 
 
+# ----- CLI Options Setup ------------------------------------------------------------------------------------------->
+def pytest_addoption(parser):
+    """
+    register argparse-style options and ini-style config values.
+    """
+    test_selection_group = parser.getgroup("Tests Selection")
+    test_selection_group.addoption(
+        "--no-fast",
+        "--no-fast-tests",
+        dest="fast",
+        action="store_true",
+        default=False,
+        help="Don't run salt-fast tests. Default: %(default)s",
+    )
+    test_selection_group.addoption(
+        "--run-slow",
+        "--slow",
+        "--slow-tests",
+        dest="slow",
+        action="store_true",
+        default=False,
+        help="Run slow tests. Default: %(default)s",
+    )
+
+
+# ----- Register Markers -------------------------------------------------------------------------------------------->
+@pytest.hookimpl(trylast=True)
+def pytest_configure(config):
+    """
+    called after command line options have been parsed
+    and all plugins and initial conftest files been loaded.
+    """
+    config.addinivalue_line(
+        "markers",
+        "slow_test: Mark test as being slow. These tests are skipped by default unless"
+        " `--run-slow` is passed",
+    )
+    # "Flag" the slowTest decorator if we're skipping slow tests or not
+    os.environ["SLOW_TESTS"] = str(config.getoption("--run-slow"))
+
+
+# ----- Test Setup -------------------------------------------------------------------------------------------------->
+@pytest.hookimpl(tryfirst=True)
+def pytest_runtest_setup(item):
+    """
+    Fixtures injection based on markers or test skips based on CLI arguments
+    """
+    if item.get_closest_marker("slow_test"):
+        if not item.config.getoption("--slow-tests"):
+            raise pytest.skip.Exception(
+                "Slow tests are disabled, pass '--run-slow' to enable them.",
+                _use_item_location=True,
+            )
+    elif item.config.getoption("--no-fast-tests"):
+        raise pytest.skip.Exception(
+            "Fast tests have been disabled by '--no-fast-tests'.",
+            _use_item_location=True,
+        )
+
+
 @pytest.fixture(scope="session")
 def salt_factories_config():  # pragma: no cover
     """
