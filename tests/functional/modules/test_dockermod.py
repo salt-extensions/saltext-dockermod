@@ -48,7 +48,7 @@ def container(salt_factories, state_tree):
 
     factory = salt_factories.get_container(
         random_string("python-3-"),
-        image_name="ghcr.io/saltstack/salt-ci-containers/python:3",
+        image_name="ghcr.io/saltstack/salt-ci-containers/python:3.11",
         container_run_kwargs={
             "ports": {"8500/tcp": None},
             "entrypoint": "tail -f /dev/null",
