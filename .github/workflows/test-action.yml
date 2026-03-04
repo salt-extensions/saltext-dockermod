@@ -49,6 +49,13 @@ jobs:
         run: |
           nox --force-color -e tests-3 -- -vv --instafail tests/
 
+      - name: Test (slow)
+        env:
+          SALT_REQUIREMENT: salt==${{ matrix.salt-version }}
+          SKIP_REQUIREMENTS_INSTALL: true
+        run: |
+          nox --force-color -e tests-3 -- -vv --instafail --no-fast-tests --slow-tests tests/
+
       - name: Create CodeCov Flags
         if: always()
         id: codecov-flags
