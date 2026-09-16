@@ -9,12 +9,15 @@ on:
         type: string
         description: JSON string containing information about changed files
 
+permissions:
+  contents: read
+
 jobs:
   Pre-Commit:
     name: Pre-Commit
     runs-on: ubuntu-24.04
     container:
-      image: 'docker.io/library/python:3.10.19-slim-bookworm@sha256:ac7bf2ae912299e41783a8e4eff07369dc6de3444bdc1cc29626a05241f957d7'
+      image: 'docker.io/library/python:3.10.20-slim-trixie@sha256:5f9928ea39771e8ddf4fb9a96ab24f65f087793635614405a1dc9384f040852e'
 
     steps:
       - name: Install System Deps
@@ -23,7 +26,7 @@ jobs:
           apt-get install -y enchant-2 git gcc make zlib1g-dev libc-dev libffi-dev g++ libxml2 libxml2-dev libxslt-dev libcurl4-openssl-dev libssl-dev libgnutls28-dev
           git config --global --add safe.directory "$(pwd)"
 
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
 
       - name: Install Pre-Commit
         run: |
@@ -41,16 +44,6 @@ jobs:
         run: |
           pre-commit run --show-diff-on-failure --color=always --files ${{ fromJSON(inputs.changed-files)['repo_files'] }}
 
-      - name: Set Exit Status
-        if: always()
-        run: |
-          mkdir exitstatus
-          echo "${{ job.status }}" > exitstatus/${{ github.job }}
-
       - name: Upload Exit Status
         if: always()
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f  # v6.0.0
-        with:
-          name: exitstatus-${{ github.job }}
-          path: exitstatus
-          if-no-files-found: error
+        uses: ./.github/actions/upload-exitstatus

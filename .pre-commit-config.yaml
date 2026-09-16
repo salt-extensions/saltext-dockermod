@@ -15,7 +15,7 @@ repos:
 
   # ----- Formatting ---------------------------------------------------------------------------->
   - repo: https://github.com/saltstack/pre-commit-remove-import-headers
-    rev: 209beff8e11fed83f3f0863ccfd95aa663fffaf6  # 1.1.0
+    rev: e79f595c0df31b8cb152c53993ce7c3c64f07cd4  # 1.1.0
     hooks:
       - id: remove-import-headers
 
@@ -37,7 +37,7 @@ repos:
 
   - repo: https://github.com/saltstack/salt-rewrite
     # Automatically rewrite code with known rules
-    rev: 8079cfb7f601e5dbad58b8449d85bb24f1e52082  # 2.5.2
+    rev: 2401c0faef69b6b846c719d611bcfe358234d5d1  # 2.5.2
     hooks:
       - id: salt-rewrite
         alias: rewrite-docstrings
@@ -47,7 +47,7 @@ repos:
 
   - repo: https://github.com/saltstack/salt-rewrite
     # Automatically rewrite code with known rules
-    rev: 8079cfb7f601e5dbad58b8449d85bb24f1e52082  # 2.5.2
+    rev: 2401c0faef69b6b846c719d611bcfe358234d5d1  # 2.5.2
     hooks:
       - id: salt-rewrite
         alias: rewrite-tests
@@ -66,7 +66,7 @@ repos:
         exclude: src/saltext/dockermod/version.py
 
   - repo: https://github.com/PyCQA/isort
-    rev: 0a09c783808cfe77bb3269250f663ff733d23302  # 7.0.0
+    rev: a333737ed43df02b18e6c95477ea1b285b3de15a  # 8.0.1
     hooks:
       - id: isort
         args: [
@@ -75,25 +75,25 @@ repos:
         exclude: src/saltext/dockermod/(__init__|version).py
 
   - repo: https://github.com/psf/black
-    rev: 6305bf1ae645ab7541be4f5028a86239316178eb  # 26.1.0
+    rev: 87928e6d6761a4a6d22250e1fee5601b3998086e  # 26.5.1
     hooks:
       - id: black
         args: [-l 100]
         exclude: src/saltext/dockermod/version.py
 
   - repo: https://github.com/adamchainz/blacken-docs
-    rev: dda8db18cfc68df532abf33b185ecd12d5b7b326  # 1.20.0
+    rev: fda77690955e9b63c6687d8806bafd56a526e45f  # 1.20.0
     hooks:
       - id: blacken-docs
         args: [--skip-errors]
         files: ^(docs/.*\.rst|src/saltext/dockermod/.*\.py)$
         additional_dependencies:
-          - black==26.1.0
+          - black==26.5.1
   # <---- Formatting -----------------------------------------------------------------------------
 
   # ----- Security ------------------------------------------------------------------------------>
   - repo: https://github.com/PyCQA/bandit
-    rev: 765f00d3f202f83f61d03f882f80a2d5142d81f8  # 1.9.3
+    rev: 92ae8b82fb422a639f0ed8d99e96cea769594e08  # 1.9.4
     hooks:
       - id: bandit
         alias: bandit-salt
@@ -102,7 +102,7 @@ repos:
         exclude: src/saltext/dockermod/version.py
 
   - repo: https://github.com/PyCQA/bandit
-    rev: 765f00d3f202f83f61d03f882f80a2d5142d81f8  # 1.9.3
+    rev: 92ae8b82fb422a639f0ed8d99e96cea769594e08  # 1.9.4
     hooks:
       - id: bandit
         alias: bandit-tests
@@ -123,8 +123,8 @@ repos:
         files: ^((setup|noxfile)|src/.*)\.py$
         require_serial: true
         additional_dependencies:
-          - nox==2025.11.12
-          - uv==0.9.27  # Makes this hook much faster
+          - nox==2026.4.10
+          - uv==0.11.26  # Makes this hook much faster
 
       - id: nox
         alias: lint-tests
@@ -134,11 +134,11 @@ repos:
         files: ^tests/.*\.py$
         require_serial: true
         additional_dependencies:
-          - nox==2025.11.12
-          - uv==0.9.27  # Makes this hook much faster
+          - nox==2026.4.10
+          - uv==0.11.26  # Makes this hook much faster
 
   - repo: https://github.com/Mateusz-Grzelinski/actionlint-py
-    rev: 85c37735ea69e5baf0681530e57e63deee0ce733  # v1.7.10.24
+    rev: 694e2c0dfb4253d51f3c6c54b8f9fec0a16764dc  # v1.7.11.24
     hooks:
       - id: actionlint
         additional_dependencies:
