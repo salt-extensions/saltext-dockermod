@@ -22,11 +22,7 @@ if tuple(map(int, metadata.version("nox").split("."))) >= (2024, 3):
     nox.options.default_venv_backend = "uv|virtualenv"
 
 # Python versions to test against
-<<<<<<< before updating
-PYTHON_VERSIONS = ("3", "3.10", "3.11")
-=======
 PYTHON_VERSIONS = ("3", "3.10", "3.11", "3.12", "3.13", "3.14")
->>>>>>> after updating
 # Be verbose when running under a CI context
 CI_RUN = (
     os.environ.get("JENKINS_URL") or os.environ.get("CI") or os.environ.get("DRONE") is not None
