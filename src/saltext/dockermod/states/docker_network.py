@@ -824,7 +824,7 @@ def present(
             if cid in disconnected_containers:
                 for key_name, arg_name in (
                     ("IPv4Address", "ipv4_address"),
-                    ("IPV6Address", "ipv6_address"),
+                    ("IPv6Address", "ipv6_address"),
                     ("Links", "links"),
                     ("Aliases", "aliases"),
                 ):
