@@ -284,6 +284,26 @@ def test_present_enable_ipv6(network, docker, docker_network):
             assert net_info["EnableIPv6"] is True
 
 
+@pytest.mark.skipif(IPV6_ENABLED is False, reason="IPv6 not enabled")
+def test_present_enable_ipv6_is_idempotent(network, docker_network):
+    """
+    Creating an IPv6-enabled network without explicit IPAM pools must be
+    idempotent. Docker auto-assigns two default IPAM pools (one IPv4, one
+    IPv6) when "enable_ipv6" is true, and a subsequent run with the same
+    SLS state must recognise those auto-assigned pools as default and not
+    recreate the network.
+    """
+    with network() as net:
+        ret = docker_network.present(name=net.name, enable_ipv6=True)
+        assert ret.result is True
+        assert ret.changes.get("created") is True
+
+        ret = docker_network.present(name=net.name, enable_ipv6=True)
+        assert ret.result is True
+        assert ret.changes == {}
+        assert ret.comment == f"Network '{net.name}' already exists, and is configured as specified"
+
+
 def test_present_attachable(network, docker, docker_network):
     with network() as net:
         ret = docker_network.present(name=net.name, attachable=True)
