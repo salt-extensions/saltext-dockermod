@@ -2075,6 +2075,22 @@ def running(
         ret["result"] = False
         comments.append("Container is not running")
 
+    # If the normal run produced only lightweight changes (e.g. a network
+    # reconnect) and did not recreate or restart the container, signal to
+    # the state system that "mod_watch" should still fire. Without this,
+    # a watched config-file change would be silently dropped whenever the
+    # normal run happened to produce any unrelated changes of its own
+    # (see salt/state.py). The "container_id", "state", "image" and
+    # "forced_update" keys all indicate that the container was recreated
+    # or restarted, which already subsumes what "mod_watch" would do.
+    if ret["changes"] and not {
+        "container_id",
+        "state",
+        "image",
+        "forced_update",
+    }.intersection(ret["changes"]):
+        ret["force_mod_watch"] = True
+
     return _format_comments(ret, comments)
 
 

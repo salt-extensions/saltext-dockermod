@@ -1,0 +1,1 @@
+Make ``docker_container.running`` return ``force_mod_watch: True`` when its normal run made only changes which do not recreate or restart the container (such as reconnecting networks), so that on Salt versions supporting it a ``watch`` requisite still triggers ``mod_watch``.
