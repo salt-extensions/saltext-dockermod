@@ -201,6 +201,7 @@ import copy
 import fnmatch
 import functools
 import gzip
+import ipaddress
 import json
 import logging
 import os
@@ -1298,7 +1299,22 @@ def compare_container_networks(first, second):
     return ret
 
 
-def compare_networks(first, second, ignore="Name,Id,Created,Containers"):
+def _is_auto_assigned_gateway(subnet, gateway):
+    """
+    Docker auto-assigns the subnet's first host address as the gateway when
+    none is explicitly requested. Only such an auto-assigned gateway should be
+    ignored when comparing IPAM pools; an explicit, non-default gateway is a
+    real configuration difference.
+    """
+    try:
+        network = ipaddress.ip_network(subnet, strict=False)
+        gateway_addr = ipaddress.ip_address(gateway)
+    except (ValueError, TypeError):
+        return False
+    return gateway_addr == network.network_address + 1
+
+
+def compare_networks(first, second, ignore="Name,Id,Created,Containers,Status"):
     """
     .. versionadded:: 2018.3.0
 
@@ -1349,9 +1365,44 @@ def compare_networks(first, second, ignore="Name,Id,Created,Containers"):
                     def kvsort(x):
                         return (list(x.keys()), list(x.values()))
 
-                    config1 = sorted(val1["Config"], key=kvsort)
-                    config2 = sorted(val2.get("Config", []), key=kvsort)
-                    if config1 != config2:
+                    def strip_empty(pool):
+                        # Newer Docker engines (29.x) emit empty-string
+                        # placeholder fields (e.g. ``IPRange: ""``) in IPAM
+                        # Config entries that older engines and Salt-built
+                        # desired configs omit. Treat empty/None values as
+                        # absent so the comparison stays semantic.
+                        return {k: v for k, v in pool.items() if v not in ("", None)}
+
+                    config1 = sorted([strip_empty(p) for p in val1["Config"]], key=kvsort)
+                    config2 = sorted(
+                        [strip_empty(p) for p in val2.get("Config", [])],
+                        key=kvsort,
+                    )
+
+                    def config_changed(pools1, pools2):
+                        by_subnet1 = {p.get("Subnet"): p for p in pools1}
+                        by_subnet2 = {p.get("Subnet"): p for p in pools2}
+                        if set(by_subnet1) != set(by_subnet2):
+                            return True
+                        for subnet_key, pool1 in by_subnet1.items():
+                            pool2 = by_subnet2[subnet_key]
+                            # Docker auto-assigns a Gateway for a pool where
+                            # none was explicitly requested (e.g. when only a
+                            # Subnet was given). Ignore a one-sided Gateway
+                            # only when it matches that auto-assigned default;
+                            # an explicit, non-default Gateway that was added
+                            # or removed is a real configuration change.
+                            if "Gateway" in pool1 and "Gateway" not in pool2:
+                                if _is_auto_assigned_gateway(subnet_key, pool1["Gateway"]):
+                                    pool1 = {k: v for k, v in pool1.items() if k != "Gateway"}
+                            elif "Gateway" in pool2 and "Gateway" not in pool1:
+                                if _is_auto_assigned_gateway(subnet_key, pool2["Gateway"]):
+                                    pool2 = {k: v for k, v in pool2.items() if k != "Gateway"}
+                            if pool1 != pool2:
+                                return True
+                        return False
+
+                    if config_changed(config1, config2):
                         ret.setdefault("IPAM", {})["Config"] = {
                             "old": config1,
                             "new": config2,
