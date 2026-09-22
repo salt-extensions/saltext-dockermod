@@ -76,6 +76,7 @@ def present(
     pillarenv=None,
     #  pylint: disable-next=unused-argument
     pillar=None,
+    cmd="sleep infinity",
     **kwargs,
 ):
     """
@@ -180,6 +181,7 @@ def present(
                 - sls: webapp1,webapp2
                 - base: centos
                 - saltenv: base
+                - cmd: "sleep infinity"
 
         .. versionadded:: 2017.7.0
         .. versionchanged:: 2018.3.0
@@ -217,6 +219,16 @@ def present(
             ``pillar_roots`` or an external Pillar source.
 
         .. versionadded:: 2018.3.0
+
+    cmd : sleep infinity
+        Specify the command to execute when starting a new container.
+        Specify empty string ``""`` to not override the default
+        container command.
+
+        .. note::
+            Only used in combination with the ``sls`` argument.
+
+        .. versionadded:: 0.1.4
 
     kwargs
         Additional keyword arguments to pass to
@@ -310,7 +322,7 @@ def present(
         }
         try:
             image_update = __salt__["docker.sls_build"](
-                repository=name, tag=tag, base=base, mods=sls, **sls_build_kwargs
+                repository=name, tag=tag, base=base, mods=sls, cmd=cmd, **sls_build_kwargs
             )
         except Exception as exc:  # pylint: disable=broad-except
             ret["comment"] = "Encountered error using SLS {} for building {}: {}".format(
