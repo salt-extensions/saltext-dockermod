@@ -7025,6 +7025,13 @@ def sls_build(repository, tag="latest", base="opensuse/python", mods=None, dryru
         when set to True the container will not be committed at the end of
         the build. The dryrun succeed also when the state contains errors.
 
+    cmd : sleep infinity
+        Specify the command to execute when starting a new container.
+        Specify empty string ``""`` to not override the default
+        container command.
+
+        .. versionadded:: 0.1.4
+
     **RETURN DATA**
 
     A dictionary with the ID of the new container. In case of a dryrun,
@@ -7038,14 +7045,20 @@ def sls_build(repository, tag="latest", base="opensuse/python", mods=None, dryru
 
     """
     create_kwargs = salt.utils.args.clean_kwargs(**copy.deepcopy(kwargs))
-    for key in ("image", "name", "cmd", "interactive", "tty", "extra_filerefs"):
+    for key in ("image", "name", "interactive", "tty", "extra_filerefs"):
         try:
             del create_kwargs[key]
         except KeyError:
             pass
 
+    if "cmd" not in create_kwargs:
+        create_kwargs["cmd"] = "sleep infinity"
+    elif create_kwargs["cmd"] == "":
+        # do not overwrite the default command
+        del create_kwargs["cmd"]
+
     # start a new container
-    ret = create(image=base, cmd="sleep infinity", interactive=True, tty=True, **create_kwargs)
+    ret = create(image=base, interactive=True, tty=True, **create_kwargs)
     id_ = ret["Id"]
     try:
         start_(id_)
