@@ -877,6 +877,32 @@ def test_running_explicit_networks(docker_container, container_name, image, modu
         assert f"Connected to network '{net.name}'." in ret.comment
 
 
+def test_running_force_mod_watch(docker_container, container_name, image, network):
+    """
+    Ensure that force_mod_watch is returned only when the container was
+    changed without being replaced or restarted, so that a watch requisite
+    still triggers mod_watch.
+    """
+    with network(subnet="10.247.197.96/27") as net:
+        kwargs = {"name": container_name, "image": image, "shutdown_timeout": 1}
+        ret = docker_container.running(**kwargs)
+        assert ret.result is True
+        assert "container_id" in ret.changes
+        assert "force_mod_watch" not in ret.full_return
+
+        # Only the networks change, so the container is neither replaced nor
+        # restarted.
+        ret = docker_container.running(networks=[net.name], **kwargs)
+        assert ret.result is True
+        assert set(ret.changes) == {"container"}
+        assert ret.full_return["force_mod_watch"] is True
+
+        ret = docker_container.running(networks=[net.name], **kwargs)
+        assert ret.result is True
+        assert not ret.changes
+        assert "force_mod_watch" not in ret.full_return
+
+
 def test_run_with_onlyif(docker_container, container_name, image, modules):
     """
     Test docker_container.run with onlyif. The container should not run
