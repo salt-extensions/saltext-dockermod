@@ -247,6 +247,46 @@ def test_present_with_reconnect(network, docker, docker_network, container, reco
         assert ret.comment == f"Network '{net.name}' was replaced with updated config"
 
 
+@pytest.mark.skipif(IPV6_ENABLED is False, reason="IPv6 not enabled")
+def test_present_with_reconnect_static_ips(network, docker, docker_network, container):
+    """
+    Test reconnecting a container with its static IPv4 and IPv6 addresses when the network is
+    replaced
+    """
+    with (
+        network(subnet="10.247.197.96/27") as ipv4_net,
+        network(subnet="fe3f:2180:26:1::/123") as ipv6_net,
+    ):
+        kwargs = {
+            "name": ipv4_net.name,
+            "enable_ipv6": True,
+            "ipam_pools": [
+                {"subnet": ipv4_net.subnet, "gateway": ipv4_net.gateway},
+                {"subnet": ipv6_net.subnet, "gateway": ipv6_net.gateway},
+            ],
+        }
+        ret = docker_network.present(**kwargs)
+        assert ret.result is True
+
+        docker.connect_container_to_network(
+            container.name,
+            ipv4_net.name,
+            ipv4_address=ipv4_net[0],
+            ipv6_address=ipv6_net[0],
+        )
+
+        # Add a label to force the network to be replaced
+        ret = docker_network.present(labels=["foo"], **kwargs)
+        assert ret.result is True
+        assert ret.changes["recreated"] is True
+        assert ret.changes["reconnected"] == [container.name]
+
+        c_info = docker.inspect_container(container.name)
+        net_info = c_info["NetworkSettings"]["Networks"][ipv4_net.name]
+        assert net_info["IPAddress"] == ipv4_net[0]
+        assert net_info["GlobalIPv6Address"] == ipv6_net[0]
+
+
 def test_present_internal(network, docker, docker_network):
     with network() as net:
         ret = docker_network.present(name=net.name, internal=True)
