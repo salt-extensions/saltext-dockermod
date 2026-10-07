@@ -328,7 +328,6 @@ def __write_docker_compose(path, docker_compose, already_existed):
 
     :return:
     """
-    del already_existed
     if path.lower().endswith((".yml", ".yaml")):
         file_path = path
         dir_name = os.path.dirname(path)
@@ -344,7 +343,8 @@ def __write_docker_compose(path, docker_compose, already_existed):
         return __standardize_result(False, f"Could not write {file_path}", None, None)
     project = __load_project_from_file_path(file_path)
     if isinstance(project, dict):
-        os.remove(file_path)
+        if not already_existed:
+            os.remove(file_path)
         return project
     return file_path
 

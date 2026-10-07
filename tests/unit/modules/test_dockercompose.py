@@ -353,3 +353,71 @@ def test_service_set_tag_fails_for_service_without_image(tmp_path):
 
     assert result["status"] is False
     assert "image" in result["message"]
+
+
+# ---------------------------------------------------------------------------
+# File preservation on edit failure tests
+# ---------------------------------------------------------------------------
+
+
+def test_create_cleans_up_file_on_load_failure(tmp_path):
+    """create() cleans up the newly created file when docker-compose validation fails."""
+    error_result = {"status": False, "message": "Validation failed", "return": None}
+    with _patch_project(return_value=error_result):
+        result = dockercompose.create(str(tmp_path), SIMPLE_COMPOSE)
+
+    assert result["status"] is False
+    created_file = tmp_path / "docker-compose.yml"
+    assert not created_file.exists()
+
+
+def test_service_create_failure_does_not_delete_compose_file(tmp_path):
+    """service_create() does not delete existing compose file when project loading fails."""
+    compose_file = tmp_path / "docker-compose.yml"
+    compose_file.write_text(SIMPLE_COMPOSE)
+    error_result = {"status": False, "message": "Validation failed", "return": None}
+
+    with _patch_project(return_value=error_result):
+        result = dockercompose.service_create(str(tmp_path), "cache", "image: redis:7")
+
+    assert result["status"] is False
+    assert compose_file.exists()
+
+
+def test_service_upsert_failure_does_not_delete_compose_file(tmp_path):
+    """service_upsert() does not delete existing compose file when project loading fails."""
+    compose_file = tmp_path / "docker-compose.yml"
+    compose_file.write_text(SIMPLE_COMPOSE)
+    error_result = {"status": False, "message": "Validation failed", "return": None}
+
+    with _patch_project(return_value=error_result):
+        result = dockercompose.service_upsert(str(tmp_path), "cache", "image: redis:7")
+
+    assert result["status"] is False
+    assert compose_file.exists()
+
+
+def test_service_remove_failure_does_not_delete_compose_file(tmp_path):
+    """service_remove() does not delete existing compose file when project loading fails."""
+    compose_file = tmp_path / "docker-compose.yml"
+    compose_file.write_text(SIMPLE_COMPOSE)
+    error_result = {"status": False, "message": "Validation failed", "return": None}
+
+    with _patch_project(return_value=error_result):
+        result = dockercompose.service_remove(str(tmp_path), "web")
+
+    assert result["status"] is False
+    assert compose_file.exists()
+
+
+def test_service_set_tag_failure_does_not_delete_compose_file(tmp_path):
+    """service_set_tag() does not delete existing compose file when project loading fails."""
+    compose_file = tmp_path / "docker-compose.yml"
+    compose_file.write_text(SIMPLE_COMPOSE)
+    error_result = {"status": False, "message": "Validation failed", "return": None}
+
+    with _patch_project(return_value=error_result):
+        result = dockercompose.service_set_tag(str(tmp_path), "web", "1.25")
+
+    assert result["status"] is False
+    assert compose_file.exists()
