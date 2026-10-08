@@ -39,8 +39,9 @@ module (formerly called **dockerng**) in the 2017.7.0 release.
 import logging
 
 import salt.utils.args
-import salt.utils.dockermod
 from salt.exceptions import CommandExecutionError
+
+import saltext.dockermod.utils.dockermod as docker_utils
 
 # Enable proper logging
 log = logging.getLogger(__name__)
@@ -66,7 +67,7 @@ def present(
     load=None,
     force=False,
     insecure_registry=False,
-    client_timeout=salt.utils.dockermod.CLIENT_TIMEOUT,
+    client_timeout=docker_utils.CLIENT_TIMEOUT,
     dockerfile=None,
     sls=None,
     base="opensuse/python",

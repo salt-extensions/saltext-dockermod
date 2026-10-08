@@ -230,7 +230,7 @@ from salt.loader.dunder import __file_client__
 from salt.state import HighState
 
 #  pylint: disable-next=import-error,no-name-in-module
-import saltext.dockermod.utils.dockermod.__init__
+import saltext.dockermod.utils.dockermod as docker_utils
 
 #  pylint: disable-next=import-error,no-name-in-module
 import saltext.dockermod.utils.dockermod.translate.container
@@ -887,7 +887,7 @@ def get_client_args(limit=None):
         salt myminion docker.get_client_args create_container,connect_container_to_network
     """
     #  pylint: disable-next=c-extension-no-member
-    return saltext.dockermod.utils.dockermod.__init__.get_client_args(limit=limit)
+    return docker_utils.get_client_args(limit=limit)
 
 
 def _get_create_kwargs(
@@ -909,7 +909,7 @@ def _get_create_kwargs(
         networks = {}
 
     #  pylint: disable-next=c-extension-no-member
-    kwargs = saltext.dockermod.utils.dockermod.__init__.translate_input(
+    kwargs = docker_utils.translate_input(
         #  pylint: disable-next=c-extension-no-member
         saltext.dockermod.utils.dockermod.translate.container,
         skip_translate=skip_translate,
@@ -2610,7 +2610,7 @@ def create(
     skip_translate=None,
     ignore_collisions=False,
     validate_ip_addrs=True,
-    client_timeout=salt.utils.dockermod.CLIENT_TIMEOUT,
+    client_timeout=docker_utils.CLIENT_TIMEOUT,
     **kwargs,
 ):
     """
@@ -3383,7 +3383,7 @@ def run_container(
     skip_translate=None,
     ignore_collisions=False,
     validate_ip_addrs=True,
-    client_timeout=salt.utils.dockermod.CLIENT_TIMEOUT,
+    client_timeout=docker_utils.CLIENT_TIMEOUT,
     bg=False,
     replace=False,
     force=False,
@@ -4577,7 +4577,7 @@ def pull(
     image,
     insecure_registry=False,
     api_response=False,
-    client_timeout=salt.utils.dockermod.CLIENT_TIMEOUT,
+    client_timeout=docker_utils.CLIENT_TIMEOUT,
 ):
     """
     .. versionchanged:: 2018.3.0
@@ -4677,7 +4677,7 @@ def push(
     image,
     insecure_registry=False,
     api_response=False,
-    client_timeout=salt.utils.dockermod.CLIENT_TIMEOUT,
+    client_timeout=docker_utils.CLIENT_TIMEOUT,
 ):
     """
     .. versionchanged:: 2015.8.4
@@ -5142,7 +5142,7 @@ def create_network(
     ignore_collisions=False,
     validate_ip_addrs=True,
     #  pylint: disable-next=unused-argument
-    client_timeout=salt.utils.dockermod.CLIENT_TIMEOUT,
+    client_timeout=docker_utils.CLIENT_TIMEOUT,
     **kwargs,
 ):
     """
@@ -5379,7 +5379,7 @@ def create_network(
         salt myminion docker.create_network mynet ipam_pools='[{"subnet": "10.0.0.0/24", "gateway": "10.0.0.1"}, {"subnet": "fe3f:2180:26:1::60/123", "gateway": "fe3f:2180:26:1::61"}]'
     """
     #  pylint: disable-next=c-extension-no-member
-    kwargs = saltext.dockermod.utils.dockermod.__init__.translate_input(
+    kwargs = docker_utils.translate_input(
         #  pylint: disable-next=c-extension-no-member
         saltext.dockermod.utils.dockermod.translate.network,
         skip_translate=skip_translate,
@@ -5403,9 +5403,7 @@ def create_network(
         # without specifying IPAM configuration.
         if ipam_pools or ipam_kwargs:
             #  pylint: disable-next=c-extension-no-member
-            kwargs["ipam"] = saltext.dockermod.utils.dockermod.__init__.create_ipam_config(
-                *ipam_pools, **ipam_kwargs
-            )
+            kwargs["ipam"] = docker_utils.create_ipam_config(*ipam_pools, **ipam_kwargs)
 
     response = _client_wrapper("create_network", name, **kwargs)
     _clear_context()
@@ -5862,8 +5860,8 @@ def stop(name, timeout=None, **kwargs):
             # Get timeout from container config
             timeout = inspect_container(name)["Config"]["StopTimeout"]
         except KeyError:
-            # Fall back to a global default defined in salt.utils.dockermod
-            timeout = salt.utils.dockermod.SHUTDOWN_TIMEOUT
+            # Fall back to a global default defined in saltext.dockermod.utils.dockermod
+            timeout = docker_utils.SHUTDOWN_TIMEOUT
 
     orig_state = state(name)
     if orig_state == "paused":

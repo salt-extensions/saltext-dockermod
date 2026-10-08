@@ -51,8 +51,9 @@ import logging
 
 import salt.utils.args
 import salt.utils.data
-import salt.utils.dockermod
 from salt.exceptions import CommandExecutionError
+
+import saltext.dockermod.utils.dockermod as docker_utils
 
 # Enable proper logging
 log = logging.getLogger(__name__)  # pylint: disable=invalid-name
@@ -211,7 +212,7 @@ def running(
     watch_action="force",
     start=True,
     shutdown_timeout=None,
-    client_timeout=salt.utils.dockermod.CLIENT_TIMEOUT,
+    client_timeout=docker_utils.CLIENT_TIMEOUT,
     networks=None,
     **kwargs,
 ):
@@ -2088,7 +2089,7 @@ def run(
     skip_translate=None,
     ignore_collisions=False,
     validate_ip_addrs=True,
-    client_timeout=salt.utils.dockermod.CLIENT_TIMEOUT,
+    client_timeout=docker_utils.CLIENT_TIMEOUT,
     **kwargs,
 ):
     """
