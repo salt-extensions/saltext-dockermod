@@ -10,7 +10,6 @@ import logging
 
 import salt.utils.args
 import salt.utils.data
-import salt.utils.dockermod.translate
 from salt.exceptions import CommandExecutionError
 from salt.exceptions import SaltInvocationError
 from salt.utils.args import get_function_argspec as _argspec
@@ -170,7 +169,7 @@ def translate_input(
     """
     Translate CLI/SLS input into the format the API expects. The ``translator``
     argument must be a module containing translation functions, within
-    salt.utils.dockermod.translate. A ``skip_translate`` kwarg can be passed to
+    saltext.dockermod.utils.dockermod.translate. A ``skip_translate`` kwarg can be passed to
     control which arguments are translated. It can be either a comma-separated
     list or an iterable containing strings (e.g. a list or tuple), and members
     of that tuple will have their translation skipped. Optionally,

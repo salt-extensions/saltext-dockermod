@@ -37,10 +37,11 @@ import random
 import string
 
 import salt.utils.args
-import salt.utils.dockermod.__init__
-import salt.utils.dockermod.translate.network
 from salt._compat import ipaddress
 from salt.exceptions import CommandExecutionError
+
+import saltext.dockermod.utils.dockermod as docker_utils
+import saltext.dockermod.utils.dockermod.translate.network as translate_network
 
 log = logging.getLogger(__name__)
 
@@ -566,8 +567,8 @@ def present(
     disconnected_containers = {}
 
     try:
-        kwargs = salt.utils.dockermod.__init__.translate_input(
-            salt.utils.dockermod.translate.network,
+        kwargs = docker_utils.translate_input(
+            translate_network,
             skip_translate=skip_translate,
             ignore_collisions=ignore_collisions,
             validate_ip_addrs=validate_ip_addrs,
@@ -597,9 +598,7 @@ def present(
     else:
         ipam_pools = ipam_kwargs.pop("ipam_pools", ())
         try:
-            ipam_config = salt.utils.dockermod.__init__.create_ipam_config(
-                *ipam_pools, **ipam_kwargs
-            )
+            ipam_config = docker_utils.create_ipam_config(*ipam_pools, **ipam_kwargs)
         except Exception as exc:  # pylint: disable=broad-except
             ret["comment"] = str(exc)
             return ret
