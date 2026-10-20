@@ -30,21 +30,33 @@ class FakeDocker:
     Minimal in-memory stand-in for the docker execution module, tracking the containers which
     docker_container.running creates, inspects, removes, renames, starts and (dis)connects to
     networks.
+
+    The existing container is described by the keyword arguments; everything not passed is left at
+    a value which keeps it out of the comparison.
     """
 
-    def __init__(self, existing_command, existing_networks, existing_state):
-        self.state = existing_state
+    def __init__(
+        self,
+        command=None,
+        hostname=None,
+        networks=(),
+        state="running",
+        docker_version=(29, 1, 0),
+    ):
+        self.state = state
+        self.docker_version = docker_version
         self.containers = {
-            NAME: self._container(EXISTING_ID, NAME, existing_command, existing_networks)
+            NAME: self._container(EXISTING_ID, NAME, command, hostname, networks),
         }
 
     @staticmethod
-    def _container(container_id, name, command, networks):
+    def _container(container_id, name, command, hostname, networks):
         return {
             "Id": container_id,
             "Name": name,
             "Image": IMAGE_ID,
-            "Config": {"Cmd": command},
+            # Docker derives the hostname from the short container ID when none is set explicitly.
+            "Config": {"Cmd": command, "Hostname": hostname or container_id[:12]},
             "HostConfig": {},
             "NetworkSettings": {"Networks": {net: {} for net in networks}},
         }
@@ -54,7 +66,7 @@ class FakeDocker:
 
     def create(self, image, name=None, command=None, **kwargs):
         name = name or TEMP_NAME
-        self.containers[name] = self._container(TEMP_ID, name, command, ())
+        self.containers[name] = self._container(TEMP_ID, name, command, kwargs.get("hostname"), ())
         return {"Id": TEMP_ID, "Name": name}
 
     def rm(self, name, **kwargs):
@@ -109,7 +121,7 @@ class FakeDocker:
             "docker.rm": self.rm,
             "docker.start": self.start,
             "docker.state": lambda name: self.state,
-            "docker.version": lambda: {"VersionInfo": (29, 1, 0)},
+            "docker.version": lambda: {"VersionInfo": self.docker_version},
         }
 
 
@@ -152,7 +164,7 @@ def test_running_force_mod_watch(
     force_mod_watch must be returned only when the normal run made changes but did not replace or
     restart the container, so that a watch requisite still triggers mod_watch.
     """
-    docker = FakeDocker(existing_command, existing_networks, existing_state)
+    docker = FakeDocker(command=existing_command, networks=existing_networks, state=existing_state)
     with (
         patch.dict(docker_state.__dict__, {"__salt__": docker.salt_functions()}),
         patch.object(docker_mod, "inspect_container", docker.inspect_container),

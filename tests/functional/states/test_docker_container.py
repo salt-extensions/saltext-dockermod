@@ -958,6 +958,7 @@ def test_running_explicit_networks(docker_container, container_name, image, modu
         assert f"Connected to network '{net.name}'." in ret.comment
 
 
+@pytest.mark.slow_test
 def test_running_force_mod_watch(docker_container, container_name, image, network):
     """
     Ensure that force_mod_watch is returned only when the container was
