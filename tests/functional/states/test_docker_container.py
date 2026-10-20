@@ -428,7 +428,7 @@ def test_running_no_changes_hostname_network(docker_container, container_name, i
 def test_running_hostname(docker_container, container_name, image, modules):
     """
     Test that the hostname Docker auto-assigns does not cause the container to be replaced, but
-    that setting or changing the hostname explicitly does
+    that setting, changing or removing an explicit hostname does
     """
     kwargs = {"name": container_name, "image": image, "shutdown_timeout": 1}
     ret = docker_container.running(**kwargs)
@@ -453,6 +453,23 @@ def test_running_hostname(docker_container, container_name, image, modules):
         ret = docker_container.running(hostname=new_hostname, **kwargs)
         assert ret.result is True
         assert not ret.changes
+
+    # Removing the explicit hostname replaces the container, so that Docker
+    # assigns its default hostname, derived from the container ID, again.
+    ret = docker_container.running(**kwargs)
+    assert ret.result is True
+    assert "container_id" in ret.changes
+    c_info = modules.docker.inspect_container(container_name)
+    assert c_info["Config"]["Hostname"]
+    assert c_info["Id"].startswith(c_info["Config"]["Hostname"])
+    assert ret.changes["container"]["Config"]["Hostname"] == {
+        "old": "bar",
+        "new": c_info["Config"]["Hostname"],
+    }
+
+    ret = docker_container.running(**kwargs)
+    assert ret.result is True
+    assert not ret.changes
 
 
 @pytest.mark.slow_test

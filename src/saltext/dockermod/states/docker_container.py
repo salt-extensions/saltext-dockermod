@@ -956,7 +956,8 @@ def running(
     hostname
         Hostname of the container. When omitted, Docker assigns a hostname
         derived from the short container ID rather than from the
-        container's ``name``.
+        container's ``name``. Removing a previously set ``hostname`` replaces
+        the container, so that Docker assigns its default hostname again.
 
         .. code-block:: yaml
 
@@ -1851,13 +1852,22 @@ def running(
             docker_version_info = __salt__["docker.version"]()["VersionInfo"]
             ignore_items = []
             # When the user does not explicitly set a hostname, Docker
-            # auto-assigns one based on the container's ID, so the existing
+            # derives one from the container's own short ID, so the existing
             # and temporary containers always disagree on Hostname even when
-            # nothing has actually changed. In that case we must ignore
-            # Hostname to avoid spurious recreations. When the user *has*
-            # set a hostname, we need to compare it so that changing the
-            # "hostname" argument triggers a container replacement.
-            if not kwargs.get("hostname"):
+            # nothing has actually changed. Hostname must be ignored in that
+            # case to avoid replacing the container on every run. Two cases
+            # still have to be compared: when the user set a hostname, so
+            # that changing it replaces the container, and when the existing
+            # container carries a hostname which Docker did not derive from
+            # its ID, so that removing the "hostname" argument restores the
+            # default.
+            existing_hostname = pre_net_connect.get("Config", {}).get("Hostname")
+            existing_id = pre_net_connect.get("Id") or ""
+            # Docker builds the default hostname by truncating the container's own ID, so treat a
+            # hostname which is a prefix of that ID as auto-assigned. Matching on the prefix rather
+            # than on a fixed length does not depend on how many characters Docker keeps.
+            auto_hostname = bool(existing_id) and existing_id.startswith(existing_hostname or "")
+            if not kwargs.get("hostname") and auto_hostname:
                 ignore_items.append("Hostname")
             if docker_version_info >= (25, 0):
                 # With docker >= 25.0 we get a new value to compare,

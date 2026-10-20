@@ -133,12 +133,14 @@ class FakeDocker:
         ("web1", "web1", False),
         ("web1", "web2", True),
         (None, "web1", True),
+        ("web1", None, True),
     ],
 )
 def test_running_hostname(docker_version, existing_hostname, hostname, replaced):
     """
-    Hostname is compared only when it is set explicitly: the container must be replaced when the
-    explicitly set hostname changes, but not because of the hostname Docker auto-assigns.
+    Hostname is compared unless both the state and the existing container leave it to Docker: the
+    container must be replaced when an explicitly set hostname is added, changed or removed, but not
+    because of the hostname Docker auto-assigns.
     """
     docker = FakeDocker(hostname=existing_hostname, docker_version=docker_version)
     kwargs = {"hostname": hostname} if hostname else {}
@@ -154,14 +156,17 @@ def test_running_hostname(docker_version, existing_hostname, hostname, replaced)
         assert ret["changes"] == {
             "container": {
                 "Config": {
-                    "Hostname": {"old": existing_hostname or EXISTING_ID[:12], "new": hostname}
+                    "Hostname": {
+                        "old": existing_hostname or EXISTING_ID[:12],
+                        "new": hostname or TEMP_ID[:12],
+                    }
                 }
             },
             "container_id": {"removed": [EXISTING_ID], "added": TEMP_ID},
         }
         assert ret["comment"] == f"Replaced container '{NAME}'"
         assert docker.containers[NAME]["Id"] == TEMP_ID
-        assert docker.containers[NAME]["Config"]["Hostname"] == hostname
+        assert docker.containers[NAME]["Config"]["Hostname"] == (hostname or TEMP_ID[:12])
     else:
         assert not ret["changes"]
         assert ret["comment"] == f"Container '{NAME}' is already configured as specified"
