@@ -11,6 +11,7 @@ import saltext.dockermod.states.docker_container as docker_state
 
 NAME = "foo"
 TEMP_NAME = "temp-container"
+NETWORK = "net1"
 IMAGE_ID = "sha256:" + "0" * 64
 EXISTING_ID = "a" * 64
 TEMP_ID = "b" * 64
@@ -27,31 +28,45 @@ def configure_loader_modules():
 class FakeDocker:
     """
     Minimal in-memory stand-in for the docker execution module, tracking the containers which
-    docker_container.running creates, inspects, removes and renames.
+    docker_container.running creates, inspects, removes, renames, starts and (dis)connects to
+    networks.
+
+    The existing container is described by the keyword arguments; everything not passed is left at
+    a value which keeps it out of the comparison.
     """
 
-    def __init__(self, existing_hostname, docker_version):
+    def __init__(
+        self,
+        command=None,
+        hostname=None,
+        networks=(),
+        state="running",
+        docker_version=(29, 1, 0),
+    ):
+        self.state = state
         self.docker_version = docker_version
-        self.containers = {NAME: self._container(EXISTING_ID, NAME, existing_hostname)}
+        self.containers = {
+            NAME: self._container(EXISTING_ID, NAME, command, hostname, networks),
+        }
 
     @staticmethod
-    def _container(container_id, name, hostname):
+    def _container(container_id, name, command, hostname, networks):
         return {
             "Id": container_id,
             "Name": name,
             "Image": IMAGE_ID,
-            # Docker assigns the short container ID as the hostname when none is set explicitly.
-            "Config": {"Hostname": hostname or container_id[:12]},
+            # Docker derives the hostname from the short container ID when none is set explicitly.
+            "Config": {"Cmd": command, "Hostname": hostname or container_id[:12]},
             "HostConfig": {},
-            "NetworkSettings": {"Networks": {}},
+            "NetworkSettings": {"Networks": {net: {} for net in networks}},
         }
 
     def inspect_container(self, name):
         return self.containers[name]
 
-    def create(self, image, name=None, **kwargs):
+    def create(self, image, name=None, command=None, **kwargs):
         name = name or TEMP_NAME
-        self.containers[name] = self._container(TEMP_ID, name, kwargs.get("hostname"))
+        self.containers[name] = self._container(TEMP_ID, name, command, kwargs.get("hostname"), ())
         return {"Id": TEMP_ID, "Name": name}
 
     def rm(self, name, **kwargs):
@@ -62,20 +77,50 @@ class FakeDocker:
         self.containers[new_name]["Name"] = new_name
         return True
 
+    def start(self, name):
+        old_state, self.state = self.state, "running"
+        return {"state": {"old": old_state, "new": self.state}}
+
+    def connected(self, net_name):
+        return [
+            name
+            for name, container in self.containers.items()
+            if net_name in container["NetworkSettings"]["Networks"]
+        ]
+
+    def connect_container_to_network(self, container, net_name, **kwargs):
+        self.containers[container]["NetworkSettings"]["Networks"][net_name] = {}
+
+    def disconnect_container_from_network(self, container, net_name):
+        del self.containers[container]["NetworkSettings"]["Networks"][net_name]
+
+    @staticmethod
+    def compare_container_networks(first, second):
+        nets1 = first["NetworkSettings"]["Networks"]
+        nets2 = second["NetworkSettings"]["Networks"]
+        return {
+            net_name: {"Connected": {"old": net_name in nets1, "new": net_name in nets2}}
+            for net_name in set(nets1) ^ set(nets2)
+        }
+
     def salt_functions(self):
         return {
             "config.option": lambda key: {},
-            "docker.compare_container_networks": lambda first, second: {},
+            "docker.compare_container_networks": self.compare_container_networks,
             # The real comparison is used, reading containers through the patched
             # docker_mod.inspect_container.
             "docker.compare_containers": docker_mod.compare_containers,
+            "docker.connect_container_to_network": self.connect_container_to_network,
+            "docker.connected": self.connected,
             "docker.create": self.create,
+            "docker.disconnect_container_from_network": self.disconnect_container_from_network,
             "docker.inspect_container": self.inspect_container,
+            "docker.networks": lambda: [{"Name": NETWORK}],
             "docker.rename": self.rename,
             "docker.resolve_image_id": lambda image: IMAGE_ID,
             "docker.rm": self.rm,
-            "docker.start": lambda name: {"state": {"old": "stopped", "new": "running"}},
-            "docker.state": lambda name: "running",
+            "docker.start": self.start,
+            "docker.state": lambda name: self.state,
             "docker.version": lambda: {"VersionInfo": self.docker_version},
         }
 
@@ -95,7 +140,7 @@ def test_running_hostname(docker_version, existing_hostname, hostname, replaced)
     Hostname is compared only when it is set explicitly: the container must be replaced when the
     explicitly set hostname changes, but not because of the hostname Docker auto-assigns.
     """
-    docker = FakeDocker(existing_hostname, docker_version)
+    docker = FakeDocker(hostname=existing_hostname, docker_version=docker_version)
     kwargs = {"hostname": hostname} if hostname else {}
     with (
         patch.dict(docker_state.__dict__, {"__salt__": docker.salt_functions()}),
