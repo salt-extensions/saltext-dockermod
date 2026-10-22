@@ -1,0 +1,173 @@
+"""
+Unit tests for the docker_container state
+"""
+
+from unittest.mock import patch
+
+import pytest
+
+import saltext.dockermod.modules.dockermod as docker_mod
+import saltext.dockermod.states.docker_container as docker_state
+
+NAME = "foo"
+TEMP_NAME = "temp-container"
+NETWORK = "net1"
+IMAGE_ID = "sha256:" + "0" * 64
+EXISTING_ID = "a" * 64
+TEMP_ID = "b" * 64
+
+
+@pytest.fixture
+def configure_loader_modules():
+    return {
+        docker_mod: {"__context__": {"docker.docker_version": ""}},
+        docker_state: {"__opts__": {"test": False}, "__context__": {}},
+    }
+
+
+class FakeDocker:
+    """
+    Minimal in-memory stand-in for the docker execution module, tracking the containers which
+    docker_container.running creates, inspects, removes, renames, starts and (dis)connects to
+    networks.
+
+    The existing container is described by the keyword arguments; everything not passed is left at
+    a value which keeps it out of the comparison.
+    """
+
+    def __init__(
+        self,
+        command=None,
+        hostname=None,
+        networks=(),
+        state="running",
+        docker_version=(29, 1, 0),
+    ):
+        self.state = state
+        self.docker_version = docker_version
+        self.containers = {
+            NAME: self._container(EXISTING_ID, NAME, command, hostname, networks),
+        }
+
+    @staticmethod
+    def _container(container_id, name, command, hostname, networks):
+        return {
+            "Id": container_id,
+            "Name": name,
+            "Image": IMAGE_ID,
+            # Docker derives the hostname from the short container ID when none is set explicitly.
+            "Config": {"Cmd": command, "Hostname": hostname or container_id[:12]},
+            "HostConfig": {},
+            "NetworkSettings": {"Networks": {net: {} for net in networks}},
+        }
+
+    def inspect_container(self, name):
+        return self.containers[name]
+
+    def create(self, image, name=None, command=None, **kwargs):
+        name = name or TEMP_NAME
+        self.containers[name] = self._container(TEMP_ID, name, command, kwargs.get("hostname"), ())
+        return {"Id": TEMP_ID, "Name": name}
+
+    def rm(self, name, **kwargs):
+        return [self.containers.pop(name)["Id"]]
+
+    def rename(self, name, new_name):
+        self.containers[new_name] = self.containers.pop(name)
+        self.containers[new_name]["Name"] = new_name
+        return True
+
+    def start(self, name):
+        old_state, self.state = self.state, "running"
+        return {"state": {"old": old_state, "new": self.state}}
+
+    def connected(self, net_name):
+        return [
+            name
+            for name, container in self.containers.items()
+            if net_name in container["NetworkSettings"]["Networks"]
+        ]
+
+    def connect_container_to_network(self, container, net_name, **kwargs):
+        self.containers[container]["NetworkSettings"]["Networks"][net_name] = {}
+
+    def disconnect_container_from_network(self, container, net_name):
+        del self.containers[container]["NetworkSettings"]["Networks"][net_name]
+
+    @staticmethod
+    def compare_container_networks(first, second):
+        nets1 = first["NetworkSettings"]["Networks"]
+        nets2 = second["NetworkSettings"]["Networks"]
+        return {
+            net_name: {"Connected": {"old": net_name in nets1, "new": net_name in nets2}}
+            for net_name in set(nets1) ^ set(nets2)
+        }
+
+    def salt_functions(self):
+        return {
+            "config.option": lambda key: {},
+            "docker.compare_container_networks": self.compare_container_networks,
+            # The real comparison is used, reading containers through the patched
+            # docker_mod.inspect_container.
+            "docker.compare_containers": docker_mod.compare_containers,
+            "docker.connect_container_to_network": self.connect_container_to_network,
+            "docker.connected": self.connected,
+            "docker.create": self.create,
+            "docker.disconnect_container_from_network": self.disconnect_container_from_network,
+            "docker.inspect_container": self.inspect_container,
+            "docker.networks": lambda: [{"Name": NETWORK}],
+            "docker.rename": self.rename,
+            "docker.resolve_image_id": lambda image: IMAGE_ID,
+            "docker.rm": self.rm,
+            "docker.start": self.start,
+            "docker.state": lambda name: self.state,
+            "docker.version": lambda: {"VersionInfo": self.docker_version},
+        }
+
+
+@pytest.mark.parametrize("docker_version", [(24, 0, 7), (29, 1, 0)])
+@pytest.mark.parametrize(
+    "existing_hostname,hostname,replaced",
+    [
+        (None, None, False),
+        ("web1", "web1", False),
+        ("web1", "web2", True),
+        (None, "web1", True),
+        ("web1", None, True),
+    ],
+)
+def test_running_hostname(docker_version, existing_hostname, hostname, replaced):
+    """
+    Hostname is compared unless both the state and the existing container leave it to Docker: the
+    container must be replaced when an explicitly set hostname is added, changed or removed, but not
+    because of the hostname Docker auto-assigns.
+    """
+    docker = FakeDocker(hostname=existing_hostname, docker_version=docker_version)
+    kwargs = {"hostname": hostname} if hostname else {}
+    with (
+        patch.dict(docker_state.__dict__, {"__salt__": docker.salt_functions()}),
+        patch.object(docker_mod, "inspect_container", docker.inspect_container),
+    ):
+        ret = docker_state.running(NAME, image="bar:latest", **kwargs)
+
+    assert ret["result"] is True
+    assert TEMP_NAME not in docker.containers
+    if replaced:
+        assert ret["changes"] == {
+            "container": {
+                "Config": {
+                    "Hostname": {
+                        "old": existing_hostname or EXISTING_ID[:12],
+                        "new": hostname or TEMP_ID[:12],
+                    }
+                }
+            },
+            "container_id": {"removed": [EXISTING_ID], "added": TEMP_ID},
+        }
+        assert ret["comment"] == f"Replaced container '{NAME}'"
+        assert docker.containers[NAME]["Id"] == TEMP_ID
+        assert docker.containers[NAME]["Config"]["Hostname"] == (hostname or TEMP_ID[:12])
+    else:
+        assert not ret["changes"]
+        assert ret["comment"] == f"Container '{NAME}' is already configured as specified"
+        assert docker.containers[NAME]["Id"] == EXISTING_ID

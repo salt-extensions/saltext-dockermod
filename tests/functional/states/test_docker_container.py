@@ -425,6 +425,54 @@ def test_running_no_changes_hostname_network(docker_container, container_name, i
 
 
 @pytest.mark.slow_test
+def test_running_hostname(docker_container, container_name, image, modules):
+    """
+    Test that the hostname Docker auto-assigns does not cause the container to be replaced, but
+    that setting, changing or removing an explicit hostname does
+    """
+    kwargs = {"name": container_name, "image": image, "shutdown_timeout": 1}
+    ret = docker_container.running(**kwargs)
+    assert ret.result is True
+    auto_hostname = modules.docker.inspect_container(container_name)["Config"]["Hostname"]
+
+    ret = docker_container.running(**kwargs)
+    assert ret.result is True
+    assert not ret.changes
+
+    for old_hostname, new_hostname in ((auto_hostname, "foo"), ("foo", "bar")):
+        ret = docker_container.running(hostname=new_hostname, **kwargs)
+        assert ret.result is True
+        assert "container_id" in ret.changes
+        assert ret.changes["container"]["Config"]["Hostname"] == {
+            "old": old_hostname,
+            "new": new_hostname,
+        }
+        c_info = modules.docker.inspect_container(container_name)
+        assert c_info["Config"]["Hostname"] == new_hostname
+
+        ret = docker_container.running(hostname=new_hostname, **kwargs)
+        assert ret.result is True
+        assert not ret.changes
+
+    # Removing the explicit hostname replaces the container, so that Docker
+    # assigns its default hostname, derived from the container ID, again.
+    ret = docker_container.running(**kwargs)
+    assert ret.result is True
+    assert "container_id" in ret.changes
+    c_info = modules.docker.inspect_container(container_name)
+    assert c_info["Config"]["Hostname"]
+    assert c_info["Id"].startswith(c_info["Config"]["Hostname"])
+    assert ret.changes["container"]["Config"]["Hostname"] == {
+        "old": "bar",
+        "new": c_info["Config"]["Hostname"],
+    }
+
+    ret = docker_container.running(**kwargs)
+    assert ret.result is True
+    assert not ret.changes
+
+
+@pytest.mark.slow_test
 def test_running_start_false_with_replace(docker_container, container_name, image, modules):
     """
     Test that we do start a container which was previously stopped, even
