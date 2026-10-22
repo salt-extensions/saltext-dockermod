@@ -1326,7 +1326,7 @@ def compare_networks(first, second, ignore="Name,Id,Created,Containers,Status"):
     second
         Name or ID of second container
 
-    ignore : Name,Id,Created,Containers
+    ignore : Name,Id,Created,Containers,Status
         A comma-separated list (or Python list) of keys to ignore when
         comparing.
 
