@@ -214,6 +214,57 @@ def image(tmp_path_factory):
             raise Exception("Failed to destroy image")
 
 
+@pytest.fixture
+def volume_image(image):
+    """
+    An image based on ``image`` that declares a ``VOLUME``
+    """
+    volume_image_name = random_string("salt-busybox-volume-", uppercase=False)
+    cmd = ["docker", "build", "--tag", volume_image_name, "-"]
+    log.debug("Running '%s' to build an image with a VOLUME", " ".join(cmd))
+    process = subprocess.run(
+        cmd,
+        input=f"FROM {image}\nVOLUME /data\n",
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        check=False,
+    )
+    log.debug("Output from %s:\n%s", " ".join(cmd), process.stdout)
+    if process.returncode != 0:
+        #  pylint: disable-next=broad-exception-raised
+        raise Exception(f"Failed to build image. Output from docker build:\n{process.stdout}")
+    try:
+        yield volume_image_name
+    finally:
+        subprocess.run(
+            ["docker", "rmi", "--force", volume_image_name],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            check=False,
+        )
+
+
+def _dangling_anonymous_volumes():
+    process = subprocess.run(
+        [
+            "docker",
+            "volume",
+            "ls",
+            "--quiet",
+            "--filter",
+            "dangling=true",
+            "--filter",
+            "label=com.docker.volume.anonymous",
+        ],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        check=True,
+    )
+    return set(process.stdout.split())
+
+
 @pytest.mark.slow_test
 def test_running_with_no_predefined_volume(
     docker_container, container_name, image, tmp_path, modules
@@ -234,6 +285,36 @@ def test_running_with_no_predefined_volume(
     # binds that we used when creating it.
     ret = modules.docker.inspect_container(container_name)
     assert "/foo" in ret["Config"]["Volumes"]
+
+
+@pytest.mark.slow_test
+def test_running_unchanged_does_not_leak_temp_container_volumes(
+    docker_container, container_name, volume_image, modules
+):
+    """
+    This tests that re-running the docker_container.running state against an
+    unchanged container does not leave behind the anonymous volume of the
+    temporary container it creates to compare against the existing one, when
+    the image declares a VOLUME.
+    """
+    ret = docker_container.running(name=container_name, image=volume_image, shutdown_timeout=1)
+    assert ret.result is True
+    before = _dangling_anonymous_volumes()
+    try:
+        ret = docker_container.running(name=container_name, image=volume_image, shutdown_timeout=1)
+        assert ret.result is True
+        assert not ret.changes
+        leaked = _dangling_anonymous_volumes() - before
+        assert not leaked
+    finally:
+        modules.docker.rm(container_name, force=True, volumes=True)
+        for volume in _dangling_anonymous_volumes() - before:
+            subprocess.run(
+                ["docker", "volume", "rm", volume],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                check=False,
+            )
 
 
 @pytest.mark.slow_test

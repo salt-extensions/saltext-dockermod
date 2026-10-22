@@ -1795,7 +1795,7 @@ def running(
 
     def _delete_temp_container():
         log.debug("Removing temp container '%s'", temp_container_name)
-        __salt__["docker.rm"](temp_container_name)
+        __salt__["docker.rm"](temp_container_name, volumes=True)
 
     # If we're not skipping the comparison, then the assumption is that
     # temp_container will be discarded, unless the comparison reveals
