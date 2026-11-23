@@ -1440,7 +1440,7 @@ def running(
 
         .. note::
             See the documentation for security_opt at
-            https://docs.docker.com/reference/compose-file/services/#security_opt
+            https://docs.docker.com/reference/compose-file/container-spec/#security_opt
 
     shm_size
         Size of /dev/shm
