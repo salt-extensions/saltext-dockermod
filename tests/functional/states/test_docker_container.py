@@ -476,7 +476,7 @@ def test_running_hostname(docker_container, container_name, image, modules):
 def test_running_container_network_mode(docker_container, container_name, image, modules):
     """
     Test that a container which shares the network namespace of another container, and so has the
-    hostname of that container, is not replaced on every run
+    hostname and the domain name of that container, is not replaced on every run
     """
     ret = docker_container.running(name=container_name, image=image, shutdown_timeout=1)
     assert ret.result is True
@@ -487,6 +487,8 @@ def test_running_container_network_mode(docker_container, container_name, image,
         "image": image,
         "shutdown_timeout": 1,
         "network_mode": f"container:{container_name}",
+        # Docker replaces it with the domain name of the other container, which is empty here.
+        "domainname": "example.org",
     }
     try:
         ret = docker_container.running(**kwargs)
@@ -494,6 +496,7 @@ def test_running_container_network_mode(docker_container, container_name, image,
         base_info = modules.docker.inspect_container(container_name)
         side_info = modules.docker.inspect_container(side_name)
         assert side_info["Config"]["Hostname"] == base_info["Config"]["Hostname"]
+        assert side_info["Config"]["Domainname"] == base_info["Config"]["Domainname"]
 
         ret = docker_container.running(**kwargs)
         assert ret.result is True

@@ -1868,12 +1868,13 @@ def running(
             # than on a fixed length does not depend on how many characters Docker keeps.
             auto_hostname = bool(existing_id) and existing_id.startswith(existing_hostname or "")
             # When a container which shares the network namespace of another container
-            # ("network_mode: container:<name>") is started, Docker sets its hostname to the one of
-            # that other container, while the temporary container is never started and keeps its
-            # own default. Docker does not allow setting a hostname in this mode, so there is
-            # nothing to compare.
-            shares_network = str(kwargs.get("network_mode") or "").startswith("container:")
-            if not kwargs.get("hostname") and (auto_hostname or shares_network):
+            # ("network_mode: container:<name>") is started, Docker sets its hostname and domain
+            # name to the ones of that other container, while the temporary container is never
+            # started and keeps its own. Docker does not allow setting a hostname in this mode and
+            # replaces a domain name set in the state, so neither can be compared.
+            if str(kwargs.get("network_mode") or "").startswith("container:"):
+                ignore_items.extend(["Hostname", "Domainname"])
+            elif not kwargs.get("hostname") and auto_hostname:
                 ignore_items.append("Hostname")
             if docker_version_info >= (25, 0):
                 # With docker >= 25.0 we get a new value to compare,

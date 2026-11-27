@@ -1,0 +1,1 @@
+Fix ``docker_container.running`` replacing a container with ``network_mode: container:<name>`` on every run when the other container has a domain name, or when the state sets ``domainname``, which Docker replaces with the domain name of the other container.
