@@ -473,6 +473,40 @@ def test_running_hostname(docker_container, container_name, image, modules):
 
 
 @pytest.mark.slow_test
+def test_running_container_network_mode(docker_container, container_name, image, modules):
+    """
+    Test that a container which shares the network namespace of another container, and so has the
+    hostname of that container, is not replaced on every run
+    """
+    ret = docker_container.running(name=container_name, image=image, shutdown_timeout=1)
+    assert ret.result is True
+
+    side_name = random_string("salt-docker-container-test-", uppercase=False)
+    kwargs = {
+        "name": side_name,
+        "image": image,
+        "shutdown_timeout": 1,
+        "network_mode": f"container:{container_name}",
+    }
+    try:
+        ret = docker_container.running(**kwargs)
+        assert ret.result is True
+        base_info = modules.docker.inspect_container(container_name)
+        side_info = modules.docker.inspect_container(side_name)
+        assert side_info["Config"]["Hostname"] == base_info["Config"]["Hostname"]
+
+        ret = docker_container.running(**kwargs)
+        assert ret.result is True
+        assert not ret.changes
+    finally:
+        try:
+            modules.docker.rm(side_name, force=True)
+        except CommandExecutionError as exc:
+            if "No such container" not in str(exc):
+                raise
+
+
+@pytest.mark.slow_test
 def test_running_start_false_with_replace(docker_container, container_name, image, modules):
     """
     Test that we do start a container which was previously stopped, even

@@ -171,3 +171,24 @@ def test_running_hostname(docker_version, existing_hostname, hostname, replaced)
         assert not ret["changes"]
         assert ret["comment"] == f"Container '{NAME}' is already configured as specified"
         assert docker.containers[NAME]["Id"] == EXISTING_ID
+
+
+@pytest.mark.parametrize("docker_version", [(24, 0, 7), (29, 1, 0)])
+def test_running_hostname_container_network_mode(docker_version):
+    """
+    A container which shares the network namespace of another container has the hostname of that
+    container, which is not a prefix of its own ID. It must not be replaced because of it.
+    """
+    other_id = "c" * 64
+    docker = FakeDocker(hostname=other_id[:12], docker_version=docker_version)
+    with (
+        patch.dict(docker_state.__dict__, {"__salt__": docker.salt_functions()}),
+        patch.object(docker_mod, "inspect_container", docker.inspect_container),
+    ):
+        ret = docker_state.running(NAME, image="bar:latest", network_mode="container:other")
+
+    assert ret["result"] is True
+    assert not ret["changes"]
+    assert ret["comment"] == f"Container '{NAME}' is already configured as specified"
+    assert TEMP_NAME not in docker.containers
+    assert docker.containers[NAME]["Id"] == EXISTING_ID
