@@ -137,6 +137,21 @@ def network(docker):
 
 
 @pytest.fixture
+def ipv6_auto_subnet(docker):
+    """
+    Skip unless Docker daemon can auto-assign an IPv6 subnet to a network
+    created with "enable_ipv6" and no explicit IPAM pools. Older Docker
+    releases reject this unless default IPv6 address pools are configured.
+    """
+    name = random_string("salt_net_probe_")
+    try:
+        docker.create_network(name, enable_ipv6=True)
+    except CommandExecutionError as exc:
+        pytest.skip(f"Docker daemon cannot auto-assign an IPv6 subnet: {exc}")
+    docker.remove_network(name)
+
+
+@pytest.fixture
 def existing_network(network, docker_network):
     with network() as net:
         ret = docker_network.present(name=net.name)
@@ -325,6 +340,7 @@ def test_present_enable_ipv6(network, docker, docker_network):
 
 
 @pytest.mark.skipif(IPV6_ENABLED is False, reason="IPv6 not enabled")
+@pytest.mark.usefixtures("ipv6_auto_subnet")
 def test_present_enable_ipv6_is_idempotent(network, docker_network):
     """
     Creating an IPv6-enabled network without explicit IPAM pools must be

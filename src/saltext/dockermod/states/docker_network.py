@@ -672,7 +672,6 @@ def present(
             # overlapping subnets (the Docker Engine will throw an error).
             temp_net_info["IPAM"] = ipam_config
 
-            existing_pool_count = len(network["IPAM"]["Config"])
             desired_pool_count = len(temp_net_info["IPAM"]["Config"])
 
             def is_default_pool(x):
@@ -683,10 +682,8 @@ def present(
                 keys = sorted(k for k, v in x.items() if v not in ("", None))
                 return keys == ["Gateway", "Subnet"]
 
-            if (
-                desired_pool_count == 0
-                and existing_pool_count >= 1
-                and all(is_default_pool(pool) for pool in network["IPAM"]["Config"])
+            if desired_pool_count == 0 and all(
+                is_default_pool(pool) for pool in network["IPAM"]["Config"]
             ):
                 # If we're not explicitly configuring an IPAM pool, then we
                 # don't care what the subnet is. Docker networks created with
