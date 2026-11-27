@@ -137,6 +137,21 @@ def network(docker):
 
 
 @pytest.fixture
+def ipv6_auto_subnet(docker):
+    """
+    Skip unless Docker daemon can auto-assign an IPv6 subnet to a network
+    created with "enable_ipv6" and no explicit IPAM pools. Older Docker
+    releases reject this unless default IPv6 address pools are configured.
+    """
+    name = random_string("salt_net_probe_")
+    try:
+        docker.create_network(name, enable_ipv6=True)
+    except CommandExecutionError as exc:
+        pytest.skip(f"Docker daemon cannot auto-assign an IPv6 subnet: {exc}")
+    docker.remove_network(name)
+
+
+@pytest.fixture
 def existing_network(network, docker_network):
     with network() as net:
         ret = docker_network.present(name=net.name)
@@ -322,6 +337,27 @@ def test_present_enable_ipv6(network, docker, docker_network):
             assert ret.result is True
             net_info = docker.inspect_network(net1.name)
             assert net_info["EnableIPv6"] is True
+
+
+@pytest.mark.skipif(IPV6_ENABLED is False, reason="IPv6 not enabled")
+@pytest.mark.usefixtures("ipv6_auto_subnet")
+def test_present_enable_ipv6_is_idempotent(network, docker_network):
+    """
+    Creating an IPv6-enabled network without explicit IPAM pools must be
+    idempotent. Docker auto-assigns two default IPAM pools (one IPv4, one
+    IPv6) when "enable_ipv6" is true, and a subsequent run with the same
+    SLS state must recognise those auto-assigned pools as default and not
+    recreate the network.
+    """
+    with network() as net:
+        ret = docker_network.present(name=net.name, enable_ipv6=True)
+        assert ret.result is True
+        assert ret.changes.get("created") is True
+
+        ret = docker_network.present(name=net.name, enable_ipv6=True)
+        assert ret.result is True
+        assert ret.changes == {}
+        assert ret.comment == f"Network '{net.name}' already exists, and is configured as specified"
 
 
 def test_present_attachable(network, docker, docker_network):
