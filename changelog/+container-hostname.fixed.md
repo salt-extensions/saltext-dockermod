@@ -1,0 +1,1 @@
+Fix ``docker_container.running`` not replacing the container when an explicitly set ``hostname`` was added, changed or removed. As a result, a container which has an explicitly set hostname while its state does not set ``hostname`` is replaced once, so that Docker assigns its default hostname.
