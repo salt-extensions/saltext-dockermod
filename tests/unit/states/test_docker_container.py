@@ -161,8 +161,8 @@ def test_running_force_mod_watch(
     existing_command, existing_networks, existing_state, change_keys, force_mod_watch
 ):
     """
-    force_mod_watch must be returned only when the normal run made changes but did not replace or
-    restart the container, so that a watch requisite still triggers mod_watch.
+    force_mod_watch must be returned only when the normal run only reconnected networks and so did
+    not replace or restart the container, so that a watch requisite still triggers mod_watch.
     """
     docker = FakeDocker(command=existing_command, networks=existing_networks, state=existing_state)
     with (
@@ -178,3 +178,51 @@ def test_running_force_mod_watch(
     assert ret.get("force_mod_watch", False) is force_mod_watch
     assert list(docker.containers[NAME]["NetworkSettings"]["Networks"]) == [NETWORK]
     assert docker.state == "running"
+
+
+def test_running_force_mod_watch_test_mode():
+    """
+    In test mode the networks are not reconnected, so force_mod_watch must not be returned.
+    """
+    docker = FakeDocker(command="sleep 600")
+    with (
+        patch.dict(docker_state.__dict__, {"__salt__": docker.salt_functions()}),
+        patch.dict(docker_state.__opts__, {"test": True}),
+        patch.object(docker_mod, "inspect_container", docker.inspect_container),
+    ):
+        ret = docker_state.running(
+            NAME, image="bar:latest", command="sleep 600", networks=[NETWORK]
+        )
+
+    assert ret["result"] is None
+    assert set(ret["changes"]) == {"container"}
+    assert "force_mod_watch" not in ret
+    assert not docker.containers[NAME]["NetworkSettings"]["Networks"]
+
+
+def test_mod_watch_signal_no_force_mod_watch():
+    """
+    A mod_watch run which sends a signal must not return force_mod_watch, which has a meaning only
+    for the normal run.
+    """
+    docker = FakeDocker(command="sleep 600", networks=[NETWORK])
+    salt_functions = docker.salt_functions()
+    signals = []
+    salt_functions["docker.signal"] = lambda name, signal: signals.append((name, signal))
+    with (
+        patch.dict(docker_state.__dict__, {"__salt__": salt_functions}),
+        patch.object(docker_mod, "inspect_container", docker.inspect_container),
+    ):
+        ret = docker_state.mod_watch(
+            NAME,
+            sfun="running",
+            image="bar:latest",
+            command="sleep 600",
+            networks=[NETWORK],
+            watch_action="SIGHUP",
+        )
+
+    assert ret["result"] is True
+    assert ret["changes"] == {"signal": "SIGHUP"}
+    assert "force_mod_watch" not in ret
+    assert signals == [(NAME, "SIGHUP")]
