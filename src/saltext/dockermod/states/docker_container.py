@@ -2076,6 +2076,19 @@ def running(
         ret["result"] = False
         comments.append("Container is not running")
 
+    # A watch requisite runs "mod_watch" only when the normal run made no changes, so a change in a
+    # watched state is dropped when the normal run only reconnected networks, which neither replaces
+    # nor restarts the container. Setting "force_mod_watch" asks the state system to run "mod_watch"
+    # anyway. Only Salt versions which include saltstack/salt#68960 (Salt master, to be released in
+    # Salt 3009) act on it, older versions ignore it.
+    changes = ret["changes"]
+    if (
+        not __opts__["test"]
+        and set(changes) == {"container"}
+        and set(changes["container"]) == {"Networks"}
+    ):
+        ret["force_mod_watch"] = True
+
     return _format_comments(ret, comments)
 
 

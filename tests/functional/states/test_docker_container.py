@@ -958,6 +958,36 @@ def test_running_explicit_networks(docker_container, container_name, image, modu
         assert f"Connected to network '{net.name}'." in ret.comment
 
 
+@pytest.mark.slow_test
+def test_running_force_mod_watch(docker_container, container_name, image, modules, network):
+    """
+    Ensure that connecting a network reports only network changes and neither
+    replaces nor restarts the container. docker_container.running sets
+    force_mod_watch for exactly such changes, so that a watch requisite still
+    runs mod_watch. The unit tests check the flag itself, since the state
+    system can remove it from the state's result.
+    """
+    with network(subnet="10.247.197.96/27") as net:
+        kwargs = {"name": container_name, "image": image, "shutdown_timeout": 1}
+        ret = docker_container.running(**kwargs)
+        assert ret.result is True
+        assert "container_id" in ret.changes
+        before = modules.docker.inspect_container(container_name)
+
+        ret = docker_container.running(networks=[net.name], **kwargs)
+        assert ret.result is True
+        assert set(ret.changes) == {"container"}
+        assert set(ret.changes["container"]) == {"Networks"}
+        after = modules.docker.inspect_container(container_name)
+        assert after["Id"] == before["Id"]
+        assert after["State"]["StartedAt"] == before["State"]["StartedAt"]
+        assert net.name in after["NetworkSettings"]["Networks"]
+
+        ret = docker_container.running(networks=[net.name], **kwargs)
+        assert ret.result is True
+        assert not ret.changes
+
+
 def test_run_with_onlyif(docker_container, container_name, image, modules):
     """
     Test docker_container.run with onlyif. The container should not run
