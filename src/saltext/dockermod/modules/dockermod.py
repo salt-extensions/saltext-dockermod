@@ -1105,7 +1105,20 @@ def compare_container_networks(first, second):
     """
 
     def _get_nets(data):
-        return data.get("NetworkSettings", {}).get("Networks", {})
+        nets = {}
+        for net_name, net_info in data.get("NetworkSettings", {}).get("Networks", {}).items():
+            ipam_config = net_info.get("IPAMConfig")
+            if isinstance(ipam_config, dict):
+                # Docker 29 reports addresses which were not set explicitly as empty strings, for
+                # example {"IPv4Address": "", "IPv6Address": ""} for an automatic IP. Drop them, so
+                # that only explicitly set addresses count as a static IP configuration and appear
+                # in the reported changes.
+                net_info = dict(
+                    net_info,
+                    IPAMConfig={key: val for key, val in ipam_config.items() if val} or None,
+                )
+            nets[net_name] = net_info
+        return nets
 
     compare_keys = __salt__["config.option"]("docker.compare_container_networks")
 
@@ -1232,12 +1245,12 @@ def compare_container_networks(first, second):
                             continue
                 ret.setdefault(net_name, {})[key] = {"old": val, "new": None}
 
-    for net_name in nets2:
+    for net_name, net_info in nets2.items():
         if net_name not in nets1:
             # Container is not attached to the network, but network is present
             # in the network_settings
             for key in compare_keys.get("static", []):
-                val = nets2[net_name].get(key)
+                val = net_info.get(key)
                 #  pylint: disable-next=no-else-continue
                 if key == "IPAMConfig":
                     _check_ipconfig(ret, net_name, new=val)
@@ -1257,7 +1270,7 @@ def compare_container_networks(first, second):
         else:
             for key in compare_keys.get("static", []):
                 old_val = nets1[net_name][key]
-                new_val = nets2[net_name][key]
+                new_val = net_info[key]
                 for item in (old_val, new_val):
                     # Normalize for list order
                     try:

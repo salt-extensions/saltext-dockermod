@@ -1,0 +1,1 @@
+Fix ``docker_container.running`` and ``docker.compare_container_networks`` with Docker 29, which reports IP addresses that were not set explicitly as empty strings in a container's ``IPAMConfig``: the reported network changes contained these empty strings, and an automatic IP configuration was treated as a static one.

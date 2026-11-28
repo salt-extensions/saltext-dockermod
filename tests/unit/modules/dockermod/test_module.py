@@ -14,6 +14,7 @@ import salt.utils.platform
 import salt.utils.versions
 from salt.exceptions import CommandExecutionError
 from salt.exceptions import SaltInvocationError
+from salt.modules.config import DEFAULTS as config_defaults
 
 #  pylint: disable-next=import-error,no-name-in-module
 import saltext.dockermod.modules.dockermod as docker_mod
@@ -624,6 +625,112 @@ def test_compare_networks_ipam_config_gateway_changed():
         "Options": {},
     }
     assert "IPAM" in docker_mod.compare_networks(existing, desired)
+
+
+def _container_network(ipam_config, ip_address=""):
+    """
+    Return the inspect data of one network of a container in the shape which Docker 29 reports.
+    """
+    return {
+        "Aliases": None,
+        "Links": None,
+        "IPAMConfig": ipam_config,
+        "IPAddress": ip_address,
+        "Gateway": "",
+        "GlobalIPv6Address": "",
+        "IPv6Gateway": "",
+    }
+
+
+@pytest.mark.parametrize(
+    "old_networks,new_networks,expected",
+    [
+        pytest.param(
+            {"net1": _container_network({"IPv4Address": "", "IPv6Address": ""}, "10.247.197.100")},
+            {"net1": _container_network({"IPv4Address": "", "IPv6Address": ""})},
+            {},
+            id="automatic-unchanged",
+        ),
+        pytest.param(
+            {},
+            {"net1": _container_network({"IPv4Address": "", "IPv6Address": ""})},
+            {"net1": {"IPConfiguration": {"old": "not connected", "new": "automatic"}}},
+            id="connected-automatic",
+        ),
+        pytest.param(
+            {},
+            {"net1": _container_network({"IPv4Address": "10.247.197.116", "IPv6Address": ""})},
+            {"net1": {"IPAMConfig": {"old": None, "new": {"IPv4Address": "10.247.197.116"}}}},
+            id="connected-static",
+        ),
+        pytest.param(
+            {
+                "net1": _container_network(
+                    {"IPv4Address": "10.247.197.110", "IPv6Address": ""}, "10.247.197.110"
+                )
+            },
+            {"net1": _container_network({"IPv4Address": "10.247.197.116", "IPv6Address": ""})},
+            {
+                "net1": {
+                    "IPAMConfig": {
+                        "old": {"IPv4Address": "10.247.197.110"},
+                        "new": {"IPv4Address": "10.247.197.116"},
+                    }
+                }
+            },
+            id="static-changed",
+        ),
+        pytest.param(
+            {
+                "net1": _container_network(
+                    {"IPv4Address": "10.247.197.110", "IPv6Address": ""}, "10.247.197.110"
+                )
+            },
+            {"net1": _container_network({"IPv4Address": "", "IPv6Address": ""})},
+            {
+                "net1": {
+                    "IPConfiguration": {"old": "static", "new": "automatic"},
+                    "IPAMConfig": {"old": {"IPv4Address": "10.247.197.110"}, "new": None},
+                }
+            },
+            id="static-to-automatic",
+        ),
+    ],
+)
+def test_compare_container_networks_ipam_config_empty_addresses(
+    old_networks, new_networks, expected
+):
+    """
+    Docker 29 reports addresses which were not set explicitly as empty strings in IPAMConfig. They
+    must neither appear in the reported changes nor make an automatic IP look like a static one.
+    """
+    old = {
+        "Id": "a" * 64,
+        "Config": {"Hostname": "a" * 12},
+        "NetworkSettings": {"Networks": old_networks},
+    }
+    new = {
+        "Id": "b" * 64,
+        "Config": {"Hostname": "b" * 12},
+        "NetworkSettings": {"Networks": new_networks},
+    }
+    with (
+        patch.dict(
+            docker_mod.__salt__,
+            {
+                "config.option": MagicMock(
+                    return_value=config_defaults["docker.compare_container_networks"]
+                )
+            },
+        ),
+        patch.object(docker_mod, "state", MagicMock(return_value="running")),
+        patch.object(
+            docker_mod,
+            "inspect_network",
+            MagicMock(return_value={"Containers": {old["Id"]: {}, new["Id"]: {}}}),
+        ),
+    ):
+        assert docker_mod.compare_container_networks(old, new) == expected
 
 
 @docker_older_than_1_5_0_skip_marker
